@@ -1,13 +1,12 @@
 // app/api/orders/route.ts
 
 import { NextResponse } from "next/server";
-import { getLastOrders } from "@/lib/storage";
+import { getOrders } from "@/lib/modal-client";
 
 export async function GET() {
-  const { orders, lastChecked, lastCheckedReadable } = await getLastOrders();
+  const data = await getOrders();
   return NextResponse.json({
-    orders,
-    last_checked: lastChecked,
-    last_checked_readable: lastCheckedReadable,
+    orders: data.orders,
+    last_checked: data.last_checked,
   });
 }

@@ -1,202 +1,240 @@
-# Queue Watcher - Next.js Edition
+# Queue Watcher - Next.js Dashboard + Modal Backend
 
-A modern queue monitoring dashboard for Hack Club orders, now running on **Next.js** and **Vercel**.
+A queue monitoring dashboard for Hack Club orders with a **Next.js frontend** and **Modal backend**.
 
-This is a rewrite of the original Modal Python app to be serverless, fast, and easy to deploy on Vercel.
-
-## What it does
-
-- Monitors the Hack Club queue at https://flavortown.hackclub.com/queue
-- Extracts order IDs from the **"Awaiting Periodical Fulfillment"** section
-- Tracks specific target order IDs and sends **Telegram notifications** when they disappear (likely fulfilled)
-- Displays a real-time dashboard with:
-  - Live queue snapshot
-  - Delivery history with **readable timestamps**
-  - Summary statistics
-
-## Key Features
-
-✅ **No source field clutter** - Removed redundant source cause field  
-✅ **Readable timestamps** - All times formatted as "May 06, 2025 14:30 UTC"  
-✅ **Serverless** - Runs on Vercel with Vercel KV for storage  
-✅ **Automated checks** - Configurable cron job (default: every minute)  
-✅ **REST API** - Query status programmatically  
-✅ **Beautiful dashboard** - Dark theme with responsive design
-
-## Quick Start
-
-### 1. Clone & Install
-
-```bash
-git clone <repo>
-cd queue-watcher-nextjs
-npm install
-```
-
-### 2. Create Environment File
-
-```bash
-cp .env.example .env.local
-```
-
-Fill in `.env.local`:
-
-```
-# Queue Configuration
-QUEUE_URL=https://flavortown.hackclub.com/queue
-TARGET_ORDER_IDS=9226,9241,9243
-CHECK_INTERVAL_MINUTES=1
-
-# Telegram (optional)
-BOT_TOKEN=your_bot_token_here
-CHAT_ID=your_chat_id_here
-
-# Cron Security
-CRON_SECRET=your_random_secret_here
-```
-
-### 3. Get Telegram Credentials (optional)
-
-1. Message [@BotFather](https://t.me/BotFather) on Telegram
-2. Run `/newbot` and follow the prompts
-3. Copy the bot token into `BOT_TOKEN`
-
-#### Getting your CHAT_ID:
-
-1. Message your bot at least once
-2. Open this URL in your browser (replace `<token>`):
-   ```
-   https://api.telegram.org/bot<token>/getUpdates
-   ```
-3. Find `"chat": { "id": ... }` and copy that number into `CHAT_ID`
-
-### 4. Deploy to Vercel
-
-```bash
-npm run build
-```
-
-Then deploy:
-
-```bash
-vercel deploy
-```
-
-**Important:** Add these secrets in Vercel:
-
-- `TARGET_ORDER_IDS` - Your order IDs to monitor
-- `BOT_TOKEN` - Telegram bot token
-- `CHAT_ID` - Telegram chat ID
-- `CRON_SECRET` - Random secret for cron validation
-
-Setup **Vercel KV** for storage:
-
-1. Go to your Vercel project settings
-2. Add a new **KV Database**
-3. Vercel will automatically set `KV_*` environment variables
-
-### 5. Local Development
-
-```bash
-npm run dev
-```
-
-Open http://localhost:3000
-
-## API Endpoints
-
-- `GET /health` → `{ "status": "ok" }`
-- `GET /api/orders` → Latest cached orders
-- `GET /api/summary` → Statistics
-- `GET /api/live` → Live queue snapshot with readable timestamps
-- `GET /api/deliveries` → Delivery history (without source field)
-
-## Cron Job Configuration
-
-The `vercel.json` file configures automatic checks:
-
-```json
-{
-  "crons": [
-    {
-      "path": "/api/cron/check-queue",
-      "schedule": "*/1 * * * *"  // Every 1 minute
-    }
-  ]
-}
-```
-
-Adjust the schedule as needed (cron format).
-
-## Monitoring Multiple Orders
-
-Use comma-separated order IDs:
-
-```
-TARGET_ORDER_IDS=4199,4226,9241,9243
-```
-
-## What's Different from the Python Version
-
-| Feature | Python (Modal) | Next.js (Vercel) |
-|---------|---|---|
-| Deployment | Modal serverless | Vercel serverless |
-| Storage | modal.Dict | Vercel KV |
-| Scheduling | APScheduler | Vercel Cron |
-| Timestamps | ISO format only | ISO + Readable format |
-| Source field | Included | ✅ Removed |
-| Dashboard | FastAPI + HTML | React + Next.js |
-| Port | Custom | Built into Vercel |
+- **Frontend**: React dashboard deployed on Vercel (no database needed)
+- **Backend**: Python app with queue monitoring, scheduling, and API - deployed on Modal
+- **Storage**: Modal.Dict for persistence
+- **Scheduling**: Modal scheduled functions (every 1 minute)
 
 ## Architecture
 
 ```
-app/
-  ├── api/
-  │   ├── health/       # Health check
-  │   ├── orders/       # Last cached orders
-  │   ├── summary/      # Statistics
-  │   ├── live/         # Current queue snapshot
-  │   ├── deliveries/   # Delivery history
-  │   └── cron/
-  │       └── check-queue/  # Scheduled job
-  ├── page.tsx          # Dashboard
-  └── layout.tsx        # App layout
-lib/
-  ├── scraper.ts        # Queue HTML parsing
-  ├── storage.ts        # Vercel KV operations
-  ├── notifier.ts       # Telegram notifications
-  └── utils.ts          # Helpers
-components/
-  └── Dashboard.tsx     # React dashboard
+┌─────────────────────┐
+│   Next.js Frontend  │
+│   (React Dashboard) │
+│  (Deployed Vercel)  │
+└──────────┬──────────┘
+           │ HTTP requests
+           │ /api/summary
+           │ /api/live
+           │ /api/deliveries
+           ▼
+┌─────────────────────┐
+│  Modal API Backend  │
+│ (Python FastAPI)    │
+│   (Deployed Modal)  │
+├─────────────────────┤
+│ Queue Monitoring    │
+│ Telegram Alerts     │
+│ Data Persistence    │
+│ Scheduled Jobs      │
+└─────────────────────┘
+```
+
+## Quick Start
+
+### 1. Deploy Modal Backend
+
+```bash
+cd modal/
+pip install modal
+
+# Create a secret with your config
+modal secret create queue-watcher-secrets \
+  --TARGET_ORDER_IDS "9226,9241,9243" \
+  --BOT_TOKEN "your_bot_token" \
+  --CHAT_ID "your_chat_id"
+
+# Deploy
+modal deploy modal_backend.py
+```
+
+Modal will give you a URL like: `https://username--queue-watcher.modal.run`
+
+### 2. Deploy Next.js Frontend
+
+```bash
+# Install dependencies
+npm install
+
+# Create .env.local
+cp .env.example .env.local
+```
+
+Edit `.env.local`:
+```
+MODAL_API_URL=https://username--queue-watcher.modal.run
+```
+
+Deploy to Vercel:
+```bash
+vercel deploy
+```
+
+### 3. Test Locally
+
+**Terminal 1 - Modal Backend (optional for local testing):**
+```bash
+cd modal/
+modal run modal_backend.py
+```
+
+**Terminal 2 - Next.js Frontend:**
+```bash
+npm run dev
+# Opens http://localhost:3000
+```
+
+## Features
+
+✅ **Beautiful Dashboard** - Real-time status with responsive design  
+✅ **Queue Monitoring** - Automatically checks every minute  
+✅ **Telegram Alerts** - Get notified when orders are fulfilled  
+✅ **Readable Timestamps** - No more ISO format confusion  
+✅ **Clean Data** - No source field clutter  
+✅ **No Database** - Modal handles all persistence  
+✅ **REST API** - Query data programmatically  
+
+## Environment Variables
+
+### Next.js (.env.local)
+
+```
+MODAL_API_URL=https://username--queue-watcher.modal.run
+```
+
+### Modal (create secret)
+
+```bash
+modal secret create queue-watcher-secrets \
+  --TARGET_ORDER_IDS "9226,9241,9243" \
+  --BOT_TOKEN "your_telegram_bot_token" \
+  --CHAT_ID "your_chat_id"
+```
+
+## Telegram Setup (Optional)
+
+1. Message [@BotFather](https://t.me/BotFather) on Telegram
+2. Run `/newbot` and follow the prompts
+3. Copy the bot token
+4. Get your CHAT_ID by messaging your bot and visiting:
+   ```
+   https://api.telegram.org/bot<token>/getUpdates
+   ```
+5. Add credentials to Modal secret
+
+## API Endpoints
+
+Available at `https://username--queue-watcher.modal.run`:
+
+- `GET /health` → Health check
+- `GET /api/orders` → Latest cached orders
+- `GET /api/summary` → Statistics (target count, live orders, delivered count)
+- `GET /api/live` → Live queue snapshot
+- `GET /api/deliveries` → Delivery history
+
+## Project Structure
+
+```
+queue-watcher-nextjs/
+├── app/                      # Next.js app directory
+│   ├── api/                  # API proxy routes
+│   │   ├── health/
+│   │   ├── orders/
+│   │   ├── summary/
+│   │   ├── live/
+│   │   └── deliveries/
+│   ├── page.tsx             # Dashboard page
+│   ├── layout.tsx           # App layout
+│   └── globals.css          # Styling
+├── components/
+│   └── Dashboard.tsx        # React dashboard component
+├── lib/
+│   ├── modal-client.ts      # Modal API client
+│   └── utils.ts             # Helper functions
+├── modal/                    # Backend code (for reference)
+│   ├── modal_backend.py     # Modal app definition
+│   └── README.md            # Backend setup guide
+├── package.json
+├── tsconfig.json
+└── .env.example
+```
+
+## Monitoring Multiple Orders
+
+Edit the Modal secret:
+
+```bash
+modal secret update queue-watcher-secrets \
+  --TARGET_ORDER_IDS "4199,4226,9241,9243"
 ```
 
 ## Troubleshooting
 
-### Cron not running?
+### Dashboard shows no data
 
-1. Verify `vercel.json` is in the root
-2. Check Vercel project logs for `/api/cron/check-queue`
-3. Ensure `CRON_SECRET` is set in Vercel environment
+1. Check Modal backend is running:
+   ```bash
+   modal logs modal_backend
+   ```
 
-### No notifications?
+2. Verify `MODAL_API_URL` is correct in `.env.local`
 
-1. Test your Telegram bot: `https://api.telegram.org/bot{BOT_TOKEN}/getMe`
-2. Verify `BOT_TOKEN` and `CHAT_ID` are correct
-3. Check Vercel function logs
+3. Make sure Modal API is accessible
 
-### Orders not showing?
+### No Telegram notifications
 
-1. Verify `QUEUE_URL` is accessible
-2. Check that order IDs in the queue start with 3+ digits
-3. Review API logs in Vercel dashboard
+1. Test your bot token:
+   ```
+   https://api.telegram.org/bot<token>/getMe
+   ```
 
-## Optional Configuration
+2. Check Modal logs for errors:
+   ```bash
+   modal logs modal_backend
+   ```
 
-- `QUEUE_URL` (default: Hack Club queue)
-- `REQUEST_TIMEOUT_SECONDS` (default: 10)
-- `REQUEST_RETRIES` (default: 3)
+3. Verify `BOT_TOKEN` and `CHAT_ID` in the secret
+
+### Can't deploy to Modal
+
+1. Install Modal: `pip install modal`
+2. Authenticate: `modal token new`
+3. Deploy: `modal deploy modal/modal_backend.py`
+
+## Development
+
+**Local frontend development:**
+```bash
+npm run dev
+```
+
+**Local backend testing:**
+```bash
+cd modal/
+modal run modal_backend.py
+```
+
+**Build for production:**
+```bash
+npm run build
+npm start
+```
+
+## Differences from Python-Only Version
+
+| Aspect | Before | Now |
+|--------|--------|-----|
+| Frontend | FastAPI HTML | React Dashboard |
+| Deployment | Modal only | Modal + Vercel |
+| Storage | modal.Dict | modal.Dict (unchanged) |
+| Scheduling | Modal scheduled | Modal scheduled (unchanged) |
+| API | Embedded in FastAPI | Separate Modal API |
+| Dashboard | HTML template | React component |
+| Responsive | Limited | Full |
 
 ## License
 
 MIT
+

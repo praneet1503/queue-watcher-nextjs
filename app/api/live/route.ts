@@ -1,22 +1,14 @@
 // app/api/live/route.ts
 
 import { NextResponse } from "next/server";
-import { getLastQueueSnapshot } from "@/lib/storage";
-import { formatReadableTime } from "@/lib/utils";
+import { getLiveSnapshot } from "@/lib/modal-client";
 
 export async function GET() {
   try {
-    const snapshot = await getLastQueueSnapshot();
-
-    // Format timestamps for readability
-    const formattedSnapshot = snapshot.map((record) => ({
-      ...record,
-      checked_at_readable: formatReadableTime(record.checked_at),
-    }));
-
+    const snapshot = await getLiveSnapshot();
     return NextResponse.json({
-      live_snapshot: formattedSnapshot,
-      live_targets: formattedSnapshot,
+      live_snapshot: snapshot,
+      live_targets: snapshot,
     });
   } catch (error) {
     console.error("Failed to get live snapshot:", error);

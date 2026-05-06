@@ -1,123 +1,211 @@
-# Deployment Instructions
+# Deployment Guide
 
-## Push to GitHub
+This app consists of two parts:
+1. **Modal Backend** - Queue monitoring, scheduling, API (in `modal/` directory)
+2. **Next.js Frontend** - Dashboard UI (in root directory)
 
-This repository is ready to push to GitHub. Follow these steps:
+## Step 1: Deploy Modal Backend
 
-### 1. Create a new GitHub repository
-
-Go to [github.com/new](https://github.com/new) and create a new repository named `queue-watcher-nextjs` (or your preferred name).
-
-**DO NOT initialize with README, .gitignore, or license** - we already have those.
-
-### 2. Add GitHub remote and push
-
-Run these commands in the project directory:
+### Prerequisites
 
 ```bash
-cd queue-watcher-nextjs
-
-# Add the remote (replace YOUR_USERNAME and YOUR_REPO with your values)
-git remote add origin https://github.com/YOUR_USERNAME/queue-watcher-nextjs.git
-
-# Push to GitHub
-git branch -M main
-git push -u origin main
+pip install modal
+modal token new  # Authenticate with Modal
 ```
 
-### 3. Verify on GitHub
+### Deploy
 
-Check [github.com/YOUR_USERNAME/queue-watcher-nextjs](https://github.com/YOUR_USERNAME/queue-watcher-nextjs) to confirm the files are there.
+```bash
+cd modal/
 
-## Deploy to Vercel
+# Create a secret with your configuration
+modal secret create queue-watcher-secrets \
+  --TARGET_ORDER_IDS "9226,9241,9243" \
+  --BOT_TOKEN "your_telegram_bot_token" \
+  --CHAT_ID "your_telegram_chat_id"
 
-### 1. Sign up / Login to Vercel
-
-Go to [vercel.com](https://vercel.com)
-
-### 2. Import the GitHub repository
-
-1. Click **"New Project"**
-2. Select **"Import Git Repository"**
-3. Search for and select `queue-watcher-nextjs`
-4. Click **Import**
-
-### 3. Configure Environment Variables
-
-In the Vercel project settings, add these environment variables:
-
-```
-QUEUE_URL=https://flavortown.hackclub.com/queue
-TARGET_ORDER_IDS=9226,9241,9243
-BOT_TOKEN=your_telegram_bot_token
-CHAT_ID=your_telegram_chat_id
-CRON_SECRET=your_random_secret_here
+# Deploy the backend
+modal deploy modal_backend.py
 ```
 
-(Keep `BOT_TOKEN` and `CHAT_ID` blank if you don't want Telegram notifications)
+Modal will output a URL like:
+```
+✓ App created with URL: https://username--queue-watcher.modal.run
+```
 
-### 4. Connect Vercel KV
+**Copy this URL** - you'll need it for the Next.js frontend.
 
-1. Go to **Storage** tab in Vercel
-2. Click **Create Database**
-3. Select **KV Database**
-4. Follow the prompts
+## Step 2: Deploy Next.js Frontend to Vercel
 
-Vercel will automatically add `KV_URL`, `KV_REST_API_URL`, and `KV_REST_API_TOKEN` to your environment variables.
+### Prerequisites
 
-### 5. Deploy
+- Node.js 18+
+- Vercel account
+- GitHub repository (push this repo to GitHub first)
 
-Click **Deploy** - Vercel will automatically build and deploy your app.
+### Configure
 
-## ✅ Security Checklist
+Create `.env.local`:
 
-**Your code is clean - these files are NOT in the repository:**
+```bash
+cp .env.example .env.local
+```
 
-- ✅ `.env.local` - excluded by `.gitignore`
-- ✅ `node_modules/` - excluded by `.gitignore`
-- ✅ `.next/` build folder - excluded by `.gitignore`
-- ✅ No hardcoded credentials anywhere
-- ✅ `.env.example` included (with placeholder values only)
+Edit `.env.local`:
+```
+MODAL_API_URL=https://username--queue-watcher.modal.run
+```
 
-All sensitive configuration is managed via:
-- Vercel environment variables (never stored in git)
-- GitHub secrets (if using CI/CD)
+### Deploy
 
-## CI/CD Pipeline (Optional)
+**Option A: Via Vercel CLI**
 
-To automatically deploy on every push to `main`:
+```bash
+npm install -g vercel
+vercel deploy
+```
 
-1. Create a GitHub Personal Access Token:
-   - Go to [github.com/settings/tokens](https://github.com/settings/tokens)
-   - Click **Generate new token (classic)**
-   - Select `repo` scope
-   - Copy the token
+**Option B: Via GitHub (recommended)**
 
-2. Get your Vercel details:
-   - Go to [vercel.com/account/tokens](https://vercel.com/account/tokens)
-   - Create a token and copy it
-   - Go to your project settings → copy **ORG ID** and **PROJECT ID**
+1. Push this repo to GitHub
+2. Go to [vercel.com](https://vercel.com)
+3. Click "New Project"
+4. Select your GitHub repository
+5. In environment variables, add:
+   - `MODAL_API_URL=https://username--queue-watcher.modal.run`
+6. Click "Deploy"
 
-3. Add GitHub secrets to your repository:
-   - Go to **Settings → Secrets and variables → Actions**
-   - Click **New repository secret**
-   - Add:
-     - `VERCEL_TOKEN` = your Vercel token
-     - `VERCEL_ORG_ID` = your organization ID
-     - `VERCEL_PROJECT_ID` = your project ID
+## Step 3: Verify Deployment
 
-4. Uncomment/enable `.github/workflows/deploy.yml` and update it with your details
+1. Open your Vercel URL
+2. Dashboard should load and show:
+   - ✅ Live queue count
+   - ✅ Delivery history
+   - ✅ Summary stats
 
-Now every push to `main` will automatically deploy to Vercel!
+## Setting Up Telegram Notifications (Optional)
 
-## Support
+### Get Telegram Credentials
 
-See `README.md` for:
-- API documentation
-- Environment variables reference
-- Troubleshooting guide
-- Architecture overview
+1. Open Telegram and message [@BotFather](https://t.me/BotFather)
+2. Run `/newbot` and follow the prompts
+3. Copy your bot token
+4. Get your chat ID:
+   - Message your bot at least once
+   - Visit: `https://api.telegram.org/bot<token>/getUpdates`
+   - Find the `"id"` field in the chat object
+
+### Update Modal Secret
+
+```bash
+modal secret update queue-watcher-secrets \
+  --BOT_TOKEN "your_bot_token" \
+  --CHAT_ID "your_chat_id"
+```
+
+The backend will auto-reload and start sending notifications.
+
+## Testing
+
+### Test Modal Backend
+
+```bash
+# Manually trigger a queue check
+modal run modal/modal_backend.py::run_once
+
+# View logs
+modal logs modal_backend
+```
+
+### Test Next.js Frontend Locally
+
+```bash
+npm run dev
+# Opens http://localhost:3000
+```
+
+If Modal isn't deployed yet, the dashboard will show empty data.
+
+## Monitoring Multiple Order IDs
+
+Update the Modal secret:
+
+```bash
+modal secret update queue-watcher-secrets \
+  --TARGET_ORDER_IDS "4199,4226,9241,9243"
+```
+
+## Logs & Debugging
+
+### Modal Backend Logs
+
+```bash
+modal logs modal_backend
+```
+
+### Vercel Frontend Logs
+
+1. Go to your Vercel project dashboard
+2. Click "Deployments"
+3. Select the latest deployment
+4. Click "View Logs"
+
+## Updating the Code
+
+### Update Backend
+
+```bash
+cd modal/
+# Make changes to modal_backend.py
+modal deploy modal_backend.py
+```
+
+### Update Frontend
+
+```bash
+# Make changes to React/Next.js code
+git add .
+git commit -m "Update dashboard"
+git push  # If using GitHub deployment
+# or
+vercel deploy
+```
+
+## FAQ
+
+**Q: How do I change the check interval?**
+
+A: Edit `modal/modal_backend.py` line with `schedule=modal.Period(minutes=1)` to change the interval.
+
+**Q: How do I add more order IDs to monitor?**
+
+A: Update the Modal secret with new IDs:
+```bash
+modal secret update queue-watcher-secrets \
+  --TARGET_ORDER_IDS "id1,id2,id3,..."
+```
+
+**Q: Can I host both on Modal instead of Vercel?**
+
+A: Yes! Use the `@modal.asgi_app()` from the original `modal_app.py` to serve both frontend and API from Modal.
+
+**Q: How do I see what orders are currently in the queue?**
+
+A: Visit `/api/live` endpoint for the current queue snapshot.
+
+## Architecture
+
+```
+Frontend (Vercel)
+    ↓ HTTP requests
+Modal API Backend
+    ├─ Scheduled checks (every minute)
+    ├─ Queue monitoring
+    ├─ Telegram alerts
+    └─ Data storage (modal.Dict)
+```
 
 ---
 
-Happy monitoring! 🎉
+Need help? Check the README.md or Modal docs: https://modal.com/docs
+
