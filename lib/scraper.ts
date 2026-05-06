@@ -45,7 +45,7 @@ export async function fetchQueueHtml(queueUrl: string): Promise<string> {
 /**
  * Extract order IDs from a table row
  */
-function findOrderIdInRow($: cheerio.CheerioAPI, row: cheerio.Element): string | null {
+function findOrderIdInRow($: cheerio.CheerioAPI, row: any): string | null {
   const $row = $(row);
 
   // Try attributes first (e.g., data-order-id)
@@ -100,7 +100,7 @@ export async function extractQueueRecords(
     const needle = normalizeText(SECTION_TITLE);
 
     // Find the section marker
-    let marker: cheerio.Element | null = null;
+    let marker: any = null;
     const allText = $("*").contents();
 
     for (let i = 0; i < allText.length; i++) {
