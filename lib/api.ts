@@ -11,7 +11,9 @@ function buildApiUrl(path: string): string {
 }
 
 async function fetchJson<T>(path: string): Promise<T> {
-  const response = await fetch(buildApiUrl(path));
+  const response = await fetch(buildApiUrl(path), {
+    signal: AbortSignal.timeout(5000),
+  });
   if (!response.ok) {
     throw new Error(`Request failed: ${response.status}`);
   }
@@ -32,15 +34,9 @@ export interface LiveRecord {
   source_url: string;
 }
 
-export interface DeliveryRecord {
-  order_id: string;
-  status: string;
-  notified_at: string;
-  last_seen_at?: string;
-  last_seen_age?: string;
-  queue_checked_at?: string;
-  queue_count?: number;
-  queue_url?: string;
+export interface OrdersSnapshot {
+  orders: string[];
+  last_checked: string | null;
 }
 
 export async function fetchSummary(): Promise<Summary> {
@@ -53,7 +49,10 @@ export async function fetchLiveSnapshot(): Promise<LiveRecord[]> {
   return data.live_snapshot || [];
 }
 
-export async function fetchDeliveries(): Promise<DeliveryRecord[]> {
-  const data = await fetchJson<{ deliveries: DeliveryRecord[] }>("/api/deliveries");
-  return data.deliveries || [];
+export async function fetchOrders(): Promise<OrdersSnapshot> {
+  const data = await fetchJson<{ orders: string[]; last_checked: string | null }>("/api/orders");
+  return {
+    orders: data.orders || [],
+    last_checked: data.last_checked ?? null,
+  };
 }

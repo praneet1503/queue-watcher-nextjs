@@ -4,23 +4,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { fetchLiveSnapshot, fetchSummary, LiveRecord, Summary } from "@/lib/api";
+import { fetchLiveSnapshot, fetchOrders, fetchSummary, LiveRecord, Summary } from "@/lib/api";
+import {
+  getLikelyFulfilledOrders,
+  getPinnedOrders,
+  setPinnedOrders,
+  updateLikelyFulfilledFromSnapshot,
+} from "@/lib/localStorage";
 import { formatReadableTime } from "@/lib/utils";
-
-function getPinnedOrders(): string[] {
-  if (typeof window === "undefined") return [];
-  try {
-    return JSON.parse(localStorage.getItem("pinnedOrders") || "[]");
-  } catch {
-    return [];
-  }
-}
-
-function setPinnedOrders(orders: string[]) {
-  if (typeof window !== "undefined") {
-    localStorage.setItem("pinnedOrders", JSON.stringify(orders));
-  }
-}
 
 export default function Dashboard() {
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -29,11 +20,13 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [pinned, setPinned] = useState<string[]>([]);
+  const [likelyFulfilledCount, setLikelyFulfilledCount] = useState(0);
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     setPinned(getPinnedOrders());
+    setLikelyFulfilledCount(getLikelyFulfilledOrders().length);
   }, []);
 
   const togglePin = (orderId: string) => {
@@ -61,6 +54,14 @@ export default function Dashboard() {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setLoading(false);
+    }
+
+    try {
+      const ordersData = await fetchOrders();
+      const updatedLikely = updateLikelyFulfilledFromSnapshot(ordersData.orders);
+      setLikelyFulfilledCount(updatedLikely.length);
+    } catch {
+      setLikelyFulfilledCount(getLikelyFulfilledOrders().length);
     }
   };
 
@@ -178,6 +179,8 @@ export default function Dashboard() {
               }}
               placeholder="Search order id"
               aria-label="Search order id"
+              id="order-search"
+              name="order-search"
             />
             <button onClick={applySearch} className="search-btn" type="button">
               Search
@@ -211,8 +214,8 @@ export default function Dashboard() {
           <div className="value">{summary?.live_count ?? 0}</div>
         </div>
         <div className="card">
-          <div className="label">Likely delivered</div>
-          <div className="value">{summary?.delivered_count ?? 0}</div>
+          <div className="label">Likely fulfilled</div>
+          <div className="value">{likelyFulfilledCount}</div>
         </div>
         <div className="card">
           <div className="label">Last checked</div>

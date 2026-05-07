@@ -4,35 +4,31 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { DeliveryRecord, fetchDeliveries } from "@/lib/api";
-import { formatReadableTime } from "@/lib/utils";
-
-function getPinnedOrders(): string[] {
-  if (typeof window === "undefined") return [];
-  try {
-    return JSON.parse(localStorage.getItem("pinnedOrders") || "[]");
-  } catch {
-    return [];
-  }
-}
-
-function setPinnedOrders(orders: string[]) {
-  if (typeof window !== "undefined") {
-    localStorage.setItem("pinnedOrders", JSON.stringify(orders));
-  }
-}
+import { fetchOrders } from "@/lib/api";
+import {
+  getLikelyFulfilledOrders,
+  getPinnedOrders,
+  setPinnedOrders,
+  updateLikelyFulfilledFromSnapshot,
+} from "@/lib/localStorage";
 
 export default function FulfilledPage() {
-  const [deliveries, setDeliveries] = useState<DeliveryRecord[]>([]);
+  const [likelyOrders, setLikelyOrders] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [pinned, setPinned] = useState<string[]>([]);
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     setPinned(getPinnedOrders());
+    const cachedLikely = getLikelyFulfilledOrders();
+    setLikelyOrders(cachedLikely);
+    if (cachedLikely.length > 0) {
+      setLoading(false);
+    }
   }, []);
 
   const togglePin = (orderId: string) => {
@@ -48,31 +44,35 @@ export default function FulfilledPage() {
   const fetchData = async () => {
     try {
       setError(null);
-      const deliveriesData = await fetchDeliveries();
-      setDeliveries(deliveriesData);
+      setIsRefreshing(true);
+      const ordersData = await fetchOrders();
+      const updatedLikely = updateLikelyFulfilledFromSnapshot(ordersData.orders);
+      setLikelyOrders(updatedLikely);
       setLastRefresh(new Date());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   };
 
   useEffect(() => {
+    setLoading(false);
     fetchData();
     const interval = setInterval(fetchData, 30000); // Refresh every 30s
     return () => clearInterval(interval);
   }, []);
 
-  if (loading) {
+  if (loading && likelyOrders.length === 0) {
     return (
       <div className="wrap">
-        <div className="loading">Loading fulfilled orders...</div>
+        <div className="loading">Loading likely fulfilled orders...</div>
       </div>
     );
   }
 
-  if (error) {
+  if (error && likelyOrders.length === 0) {
     return (
       <div className="wrap">
         <div className="error">Error: {error}</div>
@@ -80,17 +80,20 @@ export default function FulfilledPage() {
     );
   }
 
+  const showErrorBanner = error && likelyOrders.length > 0;
+  const lastRefreshText = lastRefresh ? lastRefresh.toLocaleTimeString() : "Not refreshed yet";
+
   const applySearch = () => {
     setSearchQuery(searchInput.trim());
   };
 
-  const filteredDeliveries = searchQuery
-    ? deliveries.filter((item) => item.order_id.includes(searchQuery))
-    : deliveries;
+  const filteredOrders = searchQuery
+    ? likelyOrders.filter((orderId) => orderId.includes(searchQuery))
+    : likelyOrders;
 
-  const sortedDeliveries = [...filteredDeliveries].sort((a, b) => {
-    const aPinned = pinned.includes(a.order_id) ? 1 : 0;
-    const bPinned = pinned.includes(b.order_id) ? 1 : 0;
+  const sortedOrders = [...filteredOrders].sort((a, b) => {
+    const aPinned = pinned.includes(a) ? 1 : 0;
+    const bPinned = pinned.includes(b) ? 1 : 0;
     if (aPinned !== bPinned) return bPinned - aPinned;
     return 0;
   });
@@ -125,27 +128,14 @@ export default function FulfilledPage() {
     </tr>
   );
 
-  const formatMaybe = (value?: string) => (value ? formatReadableTime(value) : "-");
-
-  const deliveryRows =
-    sortedDeliveries.length > 0
-      ? sortedDeliveries.map((item, index) =>
-          renderRow(
-            `${item.order_id}-${item.notified_at}-${index}`,
-            [
-              item.order_id,
-              item.status,
-              formatReadableTime(item.notified_at),
-              formatMaybe(item.last_seen_at),
-              item.last_seen_age || "-",
-              formatMaybe(item.queue_checked_at),
-            ],
-            item.order_id
-          )
+  const orderRows =
+    sortedOrders.length > 0
+      ? sortedOrders.map((orderId, index) =>
+          renderRow(`${orderId}-${index}`, [orderId], orderId)
         )
       : [
           <tr key="empty">
-            <td colSpan={7}>No fulfilled orders yet.</td>
+            <td colSpan={2}>No likely fulfilled orders yet.</td>
           </tr>,
         ];
 
@@ -154,14 +144,21 @@ export default function FulfilledPage() {
       <div className="hero">
         <h1>Fulfilled Orders</h1>
         <div className="sub">
-          Orders missing from the live queue and marked as likely delivered.
+          Orders missing from the live queue and stored locally as likely fulfilled.
         </div>
         <div className="refresh-info">
-          Last refreshed: {lastRefresh.toLocaleTimeString()}
-          <button onClick={fetchData} className="refresh-btn" type="button">
+          Last refreshed: {lastRefreshText}
+          <button
+            onClick={fetchData}
+            className="refresh-btn"
+            type="button"
+            disabled={isRefreshing}
+          >
             ↻ Refresh Now
           </button>
+          {isRefreshing && <span style={{ marginLeft: "0.75rem" }}>Updating...</span>}
         </div>
+        {showErrorBanner && <div className="error">Error: {error}</div>}
         <div className="actions">
           <div className="search">
             <input
@@ -171,6 +168,8 @@ export default function FulfilledPage() {
               onKeyDown={(event) => {
                 if (event.key === "Enter") applySearch();
               }}
+              id="fulfilled-order-search"
+              name="fulfilled-order-search"
               placeholder="Search order id"
               aria-label="Search order id"
             />
@@ -198,7 +197,7 @@ export default function FulfilledPage() {
 
       <section>
         <header>
-          <h2>Likely Delivered Orders</h2>
+          <h2>Likely Fulfilled Orders</h2>
         </header>
         <div className="table-wrap">
           <table>
@@ -206,14 +205,9 @@ export default function FulfilledPage() {
               <tr>
                 <th></th>
                 <th>Order ID</th>
-                <th>Status</th>
-                <th>Notified at</th>
-                <th>Last seen at</th>
-                <th>Last seen age</th>
-                <th>Queue checked at</th>
               </tr>
             </thead>
-            <tbody>{deliveryRows}</tbody>
+            <tbody>{orderRows}</tbody>
           </table>
         </div>
       </section>
