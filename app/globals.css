@@ -70,6 +70,66 @@ h2 {
   margin-top: 8px;
 }
 
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.search input {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  outline: none;
+  min-width: 200px;
+  font-size: 0.95rem;
+}
+
+.search-btn {
+  background: rgba(97, 218, 251, 0.1);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+}
+
+.search-btn:hover {
+  background: rgba(97, 218, 251, 0.2);
+}
+
+.action-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  text-decoration: none;
+  background: rgba(97, 218, 251, 0.08);
+  font-size: 0.95rem;
+  transition: all 0.2s ease;
+}
+
+.action-link:hover {
+  background: rgba(97, 218, 251, 0.18);
+}
+
 .refresh-btn {
   background: rgba(97, 218, 251, 0.1);
   color: var(--accent);

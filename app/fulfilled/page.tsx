@@ -1,10 +1,10 @@
-// components/Dashboard.tsx
+// app/fulfilled/page.tsx
 
 "use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { fetchLiveSnapshot, fetchSummary, LiveRecord, Summary } from "@/lib/api";
+import { DeliveryRecord, fetchDeliveries } from "@/lib/api";
 import { formatReadableTime } from "@/lib/utils";
 
 function getPinnedOrders(): string[] {
@@ -22,9 +22,8 @@ function setPinnedOrders(orders: string[]) {
   }
 }
 
-export default function Dashboard() {
-  const [summary, setSummary] = useState<Summary | null>(null);
-  const [liveRecords, setLiveRecords] = useState<LiveRecord[]>([]);
+export default function FulfilledPage() {
+  const [deliveries, setDeliveries] = useState<DeliveryRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
@@ -49,13 +48,8 @@ export default function Dashboard() {
   const fetchData = async () => {
     try {
       setError(null);
-      const [summaryData, liveData] = await Promise.all([
-        fetchSummary(),
-        fetchLiveSnapshot(),
-      ]);
-
-      setSummary(summaryData);
-      setLiveRecords(liveData);
+      const deliveriesData = await fetchDeliveries();
+      setDeliveries(deliveriesData);
       setLastRefresh(new Date());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
@@ -73,7 +67,7 @@ export default function Dashboard() {
   if (loading) {
     return (
       <div className="wrap">
-        <div className="loading">Loading dashboard...</div>
+        <div className="loading">Loading fulfilled orders...</div>
       </div>
     );
   }
@@ -90,11 +84,11 @@ export default function Dashboard() {
     setSearchQuery(searchInput.trim());
   };
 
-  const filteredLiveRecords = searchQuery
-    ? liveRecords.filter((item) => item.order_id.includes(searchQuery))
-    : liveRecords;
+  const filteredDeliveries = searchQuery
+    ? deliveries.filter((item) => item.order_id.includes(searchQuery))
+    : deliveries;
 
-  const sortedLiveRecords = [...filteredLiveRecords].sort((a, b) => {
+  const sortedDeliveries = [...filteredDeliveries].sort((a, b) => {
     const aPinned = pinned.includes(a.order_id) ? 1 : 0;
     const bPinned = pinned.includes(b.order_id) ? 1 : 0;
     if (aPinned !== bPinned) return bPinned - aPinned;
@@ -131,35 +125,36 @@ export default function Dashboard() {
     </tr>
   );
 
-  const liveRows =
-    sortedLiveRecords.length > 0
-      ? sortedLiveRecords.map((item, index) =>
+  const formatMaybe = (value?: string) => (value ? formatReadableTime(value) : "-");
+
+  const deliveryRows =
+    sortedDeliveries.length > 0
+      ? sortedDeliveries.map((item, index) =>
           renderRow(
-            `${item.order_id}-${item.checked_at}-${index}`,
+            `${item.order_id}-${item.notified_at}-${index}`,
             [
               item.order_id,
-              item.queue_age_text,
-              formatReadableTime(item.checked_at),
+              item.status,
+              formatReadableTime(item.notified_at),
+              formatMaybe(item.last_seen_at),
+              item.last_seen_age || "-",
+              formatMaybe(item.queue_checked_at),
             ],
             item.order_id
           )
         )
       : [
           <tr key="empty">
-            <td colSpan={4}>No live snapshot yet.</td>
+            <td colSpan={7}>No fulfilled orders yet.</td>
           </tr>,
         ];
-
-  const lastCheckedText = summary?.last_checked
-    ? formatReadableTime(summary.last_checked)
-    : "never";
 
   return (
     <div className="wrap">
       <div className="hero">
-        <h1>Queue Watcher Dashboard</h1>
+        <h1>Fulfilled Orders</h1>
         <div className="sub">
-          Live queue snapshots and stats. Open the Fulfilled Orders page to review missing orders.
+          Orders missing from the live queue and marked as likely delivered.
         </div>
         <div className="refresh-info">
           Last refreshed: {lastRefresh.toLocaleTimeString()}
@@ -195,36 +190,15 @@ export default function Dashboard() {
               </button>
             )}
           </div>
-          <Link className="action-link" href="/fulfilled">
-            View Fulfilled Orders
+          <Link className="action-link" href="/">
+            Back to Live Queue
           </Link>
-        </div>
-      </div>
-
-      <div className="cards">
-        <div className="card">
-          <div className="label">Targets</div>
-          <div className="value">{summary?.target_count ?? 0}</div>
-        </div>
-        <div className="card">
-          <div className="label">Live queue rows</div>
-          <div className="value">{summary?.live_count ?? 0}</div>
-        </div>
-        <div className="card">
-          <div className="label">Likely delivered</div>
-          <div className="value">{summary?.delivered_count ?? 0}</div>
-        </div>
-        <div className="card">
-          <div className="label">Last checked</div>
-          <div className="value" style={{ fontSize: "1rem" }}>
-            {lastCheckedText}
-          </div>
         </div>
       </div>
 
       <section>
         <header>
-          <h2>Live Queue Snapshot</h2>
+          <h2>Likely Delivered Orders</h2>
         </header>
         <div className="table-wrap">
           <table>
@@ -232,19 +206,18 @@ export default function Dashboard() {
               <tr>
                 <th></th>
                 <th>Order ID</th>
-                <th>Queue age text</th>
-                <th>Checked at</th>
+                <th>Status</th>
+                <th>Notified at</th>
+                <th>Last seen at</th>
+                <th>Last seen age</th>
+                <th>Queue checked at</th>
               </tr>
             </thead>
-            <tbody>{liveRows}</tbody>
+            <tbody>{deliveryRows}</tbody>
           </table>
         </div>
       </section>
 
-      <div className="footer">
-        API endpoints: <code>/api/health</code>, <code>/api/orders</code>, <code>/api/summary</code>,
-        <code>/api/live</code>, <code>/api/deliveries</code>
-      </div>
     </div>
   );
 }
