@@ -1,6 +1,9 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
 function buildApiUrl(path: string): string {
+  if (typeof window !== "undefined") {
+    return path;
+  }
   if (!API_BASE) {
     throw new Error("NEXT_PUBLIC_API_URL is not set");
   }
